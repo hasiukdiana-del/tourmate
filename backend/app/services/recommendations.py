@@ -1,10 +1,11 @@
 """Рекомендації (FR-07, FR-08) і навчання профілю інтересів (FR-10)."""
 from sqlalchemy.orm import Session
 
-from ..domain import recommendation_score, updated_weight
+from ..domain import updated_weight
 
 from ..models import Place, User, UserInterest
 from ..repositories import InterestRepository, PlaceRepository
+from ..patterns.ranking import RankingContext, RankingStrategy, select_strategy
 from ..schemas import PlaceOut, RecommendationOut
 
 SEARCH_RADIUS_M = 5000
@@ -17,27 +18,28 @@ def place_out(p: Place, distance_m: int | None = None) -> PlaceOut:
     )
 
 
+class Recommender:
+    """Контекст патерна Strategy: збирає кандидатів і делегує ранжування стратегії."""
+
+    def __init__(self, strategy: RankingStrategy | None = None):
+        self.strategy = strategy  # None: стратегія вибирається за станом профілю
+
+    def recommend(self, db: Session, user: User, lat: float, lon: float, limit: int,
+                  radius: int = SEARCH_RADIUS_M) -> list[RecommendationOut]:
+        places = PlaceRepository(db)
+        weights = InterestRepository(db).weights(user)
+        rated = places.rated_by(user.user_id)
+        candidates = [(p, d) for p, d in places.nearby(lat, lon, radius, None, None)
+                      if p.place_id not in rated]
+        strategy = self.strategy or select_strategy(weights)
+        ranked = strategy.rank(candidates, RankingContext(weights, places.popularity))
+        return [RecommendationOut(place=place_out(r.place, r.distance_m), score=r.score, reason_tags=r.reasons)
+                for r in ranked[:limit]]
+
+
 def recommend(db: Session, user: User, lat: float, lon: float, limit: int,
               radius: int = SEARCH_RADIUS_M) -> list[RecommendationOut]:
-    places = PlaceRepository(db)
-    weights = InterestRepository(db).weights(user)
-    rated = places.rated_by(user.user_id)
-    candidates = [(p, d) for p, d in places.nearby(lat, lon, radius, None, None)
-                  if p.place_id not in rated]
-
-    if not weights:
-        # NFR-09: без профілю інтересів повертаються популярні об’єкти
-        pop = places.popularity()
-        candidates.sort(key=lambda pd: (-pop.get(pd[0].place_id, 0), pd[1]))
-        return [RecommendationOut(place=place_out(p, d), score=0.0, reason_tags=[]) for p, d in candidates[:limit]]
-
-    result = []
-    for p, d in candidates:
-        score, matched = recommendation_score((t.name for t in p.tags), weights)
-        result.append(RecommendationOut(place=place_out(p, d), score=score, reason_tags=matched))
-    # релевантність, за рівності ближчий об’єкт
-    result.sort(key=lambda r: (-r.score, r.place.distance_m))
-    return result[:limit]
+    return Recommender().recommend(db, user, lat, lon, limit, radius)
 
 
 def learn_from_rating(db: Session, user: User, place: Place, rating: int) -> dict[str, float]:

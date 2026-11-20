@@ -10,7 +10,8 @@ from ..models import Interaction, User
 from ..repositories import PlaceRepository, RouteRepository
 from ..schemas import InteractionIn, InteractionOut, RecommendationOut, RouteIn, RouteOut
 from ..security import get_current_user
-from ..services.recommendations import learn_from_rating, recommend
+from ..patterns.events import InteractionEvent, interaction_events
+from ..services.recommendations import recommend
 from ..services.walks import build_walk, route_out
 
 router = APIRouter(tags=["personal"])
@@ -36,9 +37,10 @@ def add_interaction(data: InteractionIn, user: User = Depends(get_current_user),
         raise not_found("Place")
     item = Interaction(user_id=user.user_id, place_id=place.place_id, type=data.type, rating=data.rating)
     db.add(item)
-    changes = learn_from_rating(db, user, place, data.rating) if data.type == "rate" else {}
+    db.flush()
+    event = interaction_events.publish(InteractionEvent(db, user, place, item))
     db.commit()
-    return InteractionOut(interaction_id=item.interaction_id, profile_changes=changes)
+    return InteractionOut(interaction_id=item.interaction_id, profile_changes=event.profile_changes)
 
 
 @router.post("/routes", response_model=RouteOut, status_code=status.HTTP_201_CREATED)
