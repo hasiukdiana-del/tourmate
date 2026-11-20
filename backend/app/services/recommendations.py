@@ -17,11 +17,12 @@ def place_out(p: Place, distance_m: int | None = None) -> PlaceOut:
     )
 
 
-def recommend(db: Session, user: User, lat: float, lon: float, limit: int) -> list[RecommendationOut]:
+def recommend(db: Session, user: User, lat: float, lon: float, limit: int,
+              radius: int = SEARCH_RADIUS_M) -> list[RecommendationOut]:
     places = PlaceRepository(db)
     weights = InterestRepository(db).weights(user)
     rated = places.rated_by(user.user_id)
-    candidates = [(p, d) for p, d in places.nearby(lat, lon, SEARCH_RADIUS_M, None, None)
+    candidates = [(p, d) for p, d in places.nearby(lat, lon, radius, None, None)
                   if p.place_id not in rated]
 
     if not weights:

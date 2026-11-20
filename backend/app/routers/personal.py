@@ -20,11 +20,12 @@ router = APIRouter(tags=["personal"])
 def recommendations(
     lat: float = Query(ge=-90, le=90),
     lon: float = Query(ge=-180, le=180),
+    radius: int = Query(5000, ge=500, le=5000),  # FR-04: радіус, обраний користувачем
     limit: int = Query(20, ge=1, le=50),  # FR-07: стрічка з 20 рекомендацій
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return recommend(db, user, lat, lon, limit)
+    return recommend(db, user, lat, lon, limit, radius)
 
 
 @router.post("/interactions", response_model=InteractionOut, status_code=status.HTTP_201_CREATED)

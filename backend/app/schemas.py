@@ -56,10 +56,27 @@ class InterestIn(BaseModel):
     tag: str = Field(min_length=1, max_length=50)
     weight: float = Field(default=1.0, ge=0, le=1)
 
+    @field_validator("tag")
+    @classmethod
+    def normalized_tag(cls, v: str) -> str:
+        # Тег зберігається в нижньому регістрі без пробілів по краях; порожній тег недопустимий.
+        v = v.strip().lower()
+        if not v:
+            raise ValueError("tag must not be blank")
+        return v
+
 
 class InterestsIn(BaseModel):
     # FR-02: щонайменше 3 інтереси
     interests: list[InterestIn] = Field(min_length=3, max_length=30)
+
+    @field_validator("interests")
+    @classmethod
+    def unique_tags(cls, v: list[InterestIn]) -> list[InterestIn]:
+        # Повтор того самого тегу не рахується як окремий інтерес.
+        if len({i.tag for i in v}) != len(v):
+            raise ValueError("interests must be unique")
+        return v
 
 
 class InterestOut(BaseModel):
