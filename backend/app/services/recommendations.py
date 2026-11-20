@@ -1,6 +1,8 @@
 """Рекомендації (FR-07, FR-08) і навчання профілю інтересів (FR-10)."""
 from sqlalchemy.orm import Session
 
+from ..domain import recommendation_score, updated_weight
+
 from ..models import Place, User, UserInterest
 from ..repositories import InterestRepository, PlaceRepository
 from ..schemas import PlaceOut, RecommendationOut
@@ -30,8 +32,7 @@ def recommend(db: Session, user: User, lat: float, lon: float, limit: int) -> li
 
     result = []
     for p, d in candidates:
-        matched = sorted((t.name for t in p.tags if t.name in weights), key=lambda t: -weights[t])
-        score = round(sum(weights[t] for t in matched), 2)
+        score, matched = recommendation_score((t.name for t in p.tags), weights)
         result.append(RecommendationOut(place=place_out(p, d), score=score, reason_tags=matched))
     # релевантність, за рівності ближчий об’єкт
     result.sort(key=lambda r: (-r.score, r.place.distance_m))
@@ -40,15 +41,12 @@ def recommend(db: Session, user: User, lat: float, lon: float, limit: int) -> li
 
 def learn_from_rating(db: Session, user: User, place: Place, rating: int) -> dict[str, float]:
     """Оцінка 4 або 5 підсилює теги об’єкта на 0,1 або 0,2, оцінка 1 або 2 послаблює."""
-    delta = (rating - 3) * 0.1
     changes: dict[str, float] = {}
-    if delta == 0:
-        return changes
     interests = InterestRepository(db)
     for tag in place.tags:
         row = interests.get(user.user_id, tag.tag_id)
         old = row.weight if row else 0.0
-        new = round(min(1.0, max(0.0, old + delta)), 2)
+        new = updated_weight(old, rating)
         if new == old:
             continue
         if row is None:
