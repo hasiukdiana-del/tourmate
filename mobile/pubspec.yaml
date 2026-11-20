@@ -1,0 +1,18 @@
+name: tourmate
+description: TourMate mobile client.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.12.0
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui:
+  cupertino_ui:
+  flutter_riverpod: ^3.5.0
+  go_router: ^18.1.0
+  google_fonts: ^6.2.0
+dev_dependencies:
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
